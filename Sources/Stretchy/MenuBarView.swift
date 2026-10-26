@@ -20,6 +20,19 @@ struct MenuBarView: View {
         }
         Button(tr("menu.remindNow")) { engine.preview() }
 
+        if !settings.lunchConfigured {
+            Divider()
+            Button(tr("menu.lunch.config")) { SettingsWindowController.shared.show(tab: .lunch) }
+        } else if settings.lunchEnabled {
+            Divider()
+            Button(tr("menu.lunch.open")) { LunchOrder.open() }
+            if engine.lunchOrdered {
+                Text(tr("menu.lunch.ordered"))
+            } else {
+                Button(tr("menu.lunch.markOrdered")) { engine.markLunchOrdered() }
+            }
+        }
+
         Divider()
 
         if engine.isPaused {

@@ -32,6 +32,14 @@ final class AppSettings: ObservableObject {
         didSet { ud.set(scheduleDays.map(String.init).joined(separator: ","), forKey: "scheduleDays") }
     }
 
+    // Lunch order – nhắc đặt cơm trong khoảng [lunchStart, lunchEnd), thứ 2 → thứ 6
+    @Published var lunchEnabled: Bool { didSet { ud.set(lunchEnabled, forKey: "lunchEnabled") } }
+    @Published var lunchURL: String { didSet { ud.set(lunchURL, forKey: "lunchURL") } }
+    @Published var lunchStart: Int { didSet { ud.set(lunchStart, forKey: "lunchStart") } }       // phút từ 0:00
+    @Published var lunchEnd: Int { didSet { ud.set(lunchEnd, forKey: "lunchEnd") } }
+    @Published var lunchRepeatMinutes: Int { didSet { ud.set(lunchRepeatMinutes, forKey: "lunchRepeatMinutes") } }
+    @Published var lunchOpenMode: String { didSet { ud.set(lunchOpenMode, forKey: "lunchOpenMode") } }  // browser | webview
+
     // Keep awake (giá trị mặc định cho mục "tuỳ chỉnh" / "hẹn giờ tắt")
     @Published var keepAwakeCustomMinutes: Int { didSet { ud.set(keepAwakeCustomMinutes, forKey: "keepAwakeCustomMinutes") } }
     @Published var keepAwakeUntil: Int { didSet { ud.set(keepAwakeUntil, forKey: "keepAwakeUntil") } }   // phút từ 0:00
@@ -65,6 +73,13 @@ final class AppSettings: ObservableObject {
         scheduleEnd = udInt("scheduleEnd", 18 * 60)
         scheduleDays = udString("scheduleDays", "2,3,4,5,6").split(separator: ",").compactMap { Int($0) }
 
+        lunchEnabled = udBool("lunchEnabled", true)
+        lunchURL = udString("lunchURL", "")
+        lunchStart = udInt("lunchStart", 9 * 60)
+        lunchEnd = udInt("lunchEnd", 10 * 60)
+        lunchRepeatMinutes = udInt("lunchRepeatMinutes", 10)
+        lunchOpenMode = udString("lunchOpenMode", "browser")
+
         keepAwakeCustomMinutes = udInt("keepAwakeCustomMinutes", 90)
         keepAwakeUntil = udInt("keepAwakeUntil", 18 * 60)
 
@@ -79,6 +94,25 @@ final class AppSettings: ObservableObject {
 }
 
 extension AppSettings {
+    /// URL trang đặt cơm (tự thêm https:// nếu thiếu); nil nếu chưa cấu hình / không hợp lệ
+    var lunchURLValue: URL? {
+        var s = lunchURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        if !s.contains("://") { s = "https://" + s }
+        guard let url = URL(string: s), url.host != nil else { return nil }
+        return url
+    }
+
+    var lunchConfigured: Bool { lunchURLValue != nil }
+
+    /// Đang trong khoảng nhắc đặt cơm không? (thứ 2 → thứ 6, từ lunchStart đến trước lunchEnd)
+    func isWithinLunchWindow(_ date: Date = Date()) -> Bool {
+        let c = Calendar.current.dateComponents([.weekday, .hour, .minute], from: date)
+        guard let wd = c.weekday, (2...6).contains(wd) else { return false }
+        let m = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        return m >= lunchStart && m < lunchEnd
+    }
+
     /// Có đang trong khung giờ làm việc không? (luôn true nếu tính năng này tắt)
     func isWithinSchedule(_ date: Date = Date()) -> Bool {
         guard scheduleEnabled else { return true }

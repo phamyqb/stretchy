@@ -2,11 +2,19 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
+enum SettingsTab: Hashable { case general, reminders, schedule, lunch, awake, popup, sound, about }
+
+final class SettingsNav: ObservableObject {
+    static let shared = SettingsNav()
+    @Published var tab: SettingsTab = .general
+}
+
 final class SettingsWindowController {
     static let shared = SettingsWindowController()
     private var window: NSWindow?
 
-    func show() {
+    func show(tab: SettingsTab? = nil) {
+        if let tab { SettingsNav.shared.tab = tab }
         if window == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
             w.title = "Stretchy"
@@ -23,19 +31,21 @@ final class SettingsWindowController {
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var awake = KeepAwake.shared
+    @ObservedObject var nav = SettingsNav.shared
     @State private var launchRefresh = false
 
     var body: some View {
-        TabView {
-            general.tabItem { Label(tr("tab.general"), systemImage: "gearshape") }
-            reminders.tabItem { Label(tr("tab.reminders"), systemImage: "bell") }
-            schedule.tabItem { Label(tr("tab.schedule"), systemImage: "calendar.badge.clock") }
-            keepAwake.tabItem { Label(tr("tab.awake"), systemImage: "cup.and.saucer") }
-            popup.tabItem { Label(tr("tab.popup"), systemImage: "rectangle.on.rectangle") }
-            sound.tabItem { Label(tr("tab.sound"), systemImage: "speaker.wave.2") }
-            about.tabItem { Label(tr("tab.about"), systemImage: "info.circle") }
+        TabView(selection: $nav.tab) {
+            general.tabItem { Label(tr("tab.general"), systemImage: "gearshape") }.tag(SettingsTab.general)
+            reminders.tabItem { Label(tr("tab.reminders"), systemImage: "bell") }.tag(SettingsTab.reminders)
+            schedule.tabItem { Label(tr("tab.schedule"), systemImage: "calendar.badge.clock") }.tag(SettingsTab.schedule)
+            lunch.tabItem { Label(tr("tab.lunch"), systemImage: "fork.knife") }.tag(SettingsTab.lunch)
+            keepAwake.tabItem { Label(tr("tab.awake"), systemImage: "cup.and.saucer") }.tag(SettingsTab.awake)
+            popup.tabItem { Label(tr("tab.popup"), systemImage: "rectangle.on.rectangle") }.tag(SettingsTab.popup)
+            sound.tabItem { Label(tr("tab.sound"), systemImage: "speaker.wave.2") }.tag(SettingsTab.sound)
+            about.tabItem { Label(tr("tab.about"), systemImage: "info.circle") }.tag(SettingsTab.about)
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 680, height: 400)
     }
 
     // MARK: Tabs
@@ -107,6 +117,38 @@ struct SettingsView: View {
             Text(tr("set.scheduleHint"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var lunch: some View {
+        Form {
+            Toggle(tr("set.lunch"), isOn: $settings.lunchEnabled)
+
+            if settings.lunchEnabled {
+                TextField(tr("set.lunchURL"), text: $settings.lunchURL, prompt: Text("https://…"))
+                    .textFieldStyle(.roundedBorder)
+                DatePicker(tr("set.lunchFrom"),
+                           selection: timeBinding($settings.lunchStart),
+                           displayedComponents: .hourAndMinute)
+                DatePicker(tr("set.lunchTo"),
+                           selection: timeBinding($settings.lunchEnd),
+                           displayedComponents: .hourAndMinute)
+                minutesStepper("set.lunchRepeat", $settings.lunchRepeatMinutes, 1...30)
+                Picker(tr("set.lunchOpen"), selection: $settings.lunchOpenMode) {
+                    Text(tr("lunch.open.browser")).tag("browser")
+                    Text(tr("lunch.open.webview")).tag("webview")
+                }
+                HStack {
+                    Button(tr("set.testPopup")) { ReminderEngine.shared.preview(.lunch) }
+                    Button(tr("menu.lunch.open")) { LunchOrder.open() }
+                        .disabled(!settings.lunchConfigured)
+                }
+            }
+
+            Text(settings.lunchStart >= settings.lunchEnd ? tr("set.lunchRangeError") : tr("set.lunchHint"))
+                .font(.footnote)
+                .foregroundStyle(settings.lunchStart >= settings.lunchEnd ? Color.red : Color.secondary)
         }
         .formStyle(.grouped)
     }

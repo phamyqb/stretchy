@@ -13,11 +13,13 @@ final class ReminderEngine: ObservableObject {
     @Published private(set) var todayCount: Int = 0
     @Published private(set) var todayWater: Int = 0
     @Published private(set) var isOffHours: Bool = false
+    @Published private(set) var lunchOrdered: Bool = false
 
     private let settings = AppSettings.shared
     private var phaseEnd = Date()
     private var eyeEnd = Date()
     private var waterEnd = Date()
+    private var lunchNext = Date.distantPast
     private var prompting: ReminderKind?
     private var timer: Timer?
     private var sleepDate: Date?
@@ -69,6 +71,8 @@ final class ReminderEngine: ObservableObject {
             currentDay = today
             todayCount = 0
             todayWater = 0
+            lunchOrdered = false
+            lunchNext = .distantPast
             saveStats()
         }
 
@@ -103,6 +107,11 @@ final class ReminderEngine: ObservableObject {
             return
         }
 
+        if lunchDue(now) {
+            fire(.lunch)
+            return
+        }
+
         if now >= phaseEnd {
             fire(phase == .sitting ? .stand : .sit)
             return
@@ -121,6 +130,11 @@ final class ReminderEngine: ObservableObject {
         }
 
         updateMenuTitle()
+    }
+
+    private func lunchDue(_ now: Date) -> Bool {
+        settings.lunchEnabled && settings.lunchConfigured && !lunchOrdered
+            && now >= lunchNext && settings.isWithinLunchWindow(now)
     }
 
     private func idleSeconds() -> TimeInterval {
@@ -154,7 +168,7 @@ final class ReminderEngine: ObservableObject {
                 waterEnd = now.addingTimeInterval(TimeInterval(settings.waterMinutes * 60))
             case .snooze, .timeout:
                 waterEnd = now.addingTimeInterval(snooze)
-            case .skip:
+            case .skip, .open:
                 waterEnd = now.addingTimeInterval(TimeInterval(settings.waterMinutes * 60))
             }
         case .eyes:
@@ -169,16 +183,27 @@ final class ReminderEngine: ObservableObject {
                 registerChange()
             case .snooze, .timeout:
                 phaseEnd = now.addingTimeInterval(snooze)
-            case .skip:
+            case .skip, .open:
                 phaseEnd = now.addingTimeInterval(sit)
             }
         case .sit:
             switch action {
-            case .done, .skip:
+            case .done, .skip, .open:
                 phase = .sitting
                 phaseEnd = now.addingTimeInterval(sit)
             case .snooze, .timeout:
                 phaseEnd = now.addingTimeInterval(snooze)
+            }
+        case .lunch:
+            let again = now.addingTimeInterval(TimeInterval(settings.lunchRepeatMinutes * 60))
+            switch action {
+            case .done:
+                registerLunchOrdered()
+            case .open:
+                LunchOrder.open()      // mở web chưa phải đã đặt → vẫn nhắc lại đến khi bấm "Đã đặt"
+                lunchNext = again
+            case .snooze, .skip, .timeout:
+                lunchNext = again
             }
         }
         updateMenuTitle()
@@ -201,6 +226,12 @@ final class ReminderEngine: ObservableObject {
     func logWater() {
         registerWater()
         waterEnd = Date().addingTimeInterval(TimeInterval(settings.waterMinutes * 60))
+    }
+
+    /// Người dùng tự đánh dấu đã đặt cơm hôm nay (từ menu bar)
+    func markLunchOrdered() {
+        if prompting == .lunch { dismissPopup() }
+        registerLunchOrdered()
     }
 
     func preview(_ kind: ReminderKind = .stand) {
@@ -278,11 +309,17 @@ final class ReminderEngine: ObservableObject {
         saveStats()
     }
 
+    private func registerLunchOrdered() {
+        lunchOrdered = true
+        saveStats()
+    }
+
     private func saveStats() {
         let d = UserDefaults.standard
         d.set(currentDay.timeIntervalSince1970, forKey: "statsDay")
         d.set(todayCount, forKey: "statsCount")
         d.set(todayWater, forKey: "statsWater")
+        if lunchOrdered { d.set(currentDay.timeIntervalSince1970, forKey: "lunchDay") }
     }
 
     private func loadStats() {
@@ -291,5 +328,6 @@ final class ReminderEngine: ObservableObject {
             todayCount = d.integer(forKey: "statsCount")
             todayWater = d.integer(forKey: "statsWater")
         }
+        lunchOrdered = d.double(forKey: "lunchDay") == currentDay.timeIntervalSince1970
     }
 }

@@ -73,6 +73,7 @@ struct PopupView: View {
         switch kind {
         case .stand: return tr("celebrate", ReminderEngine.shared.todayCount)
         case .water: return tr("celebrate.water", ReminderEngine.shared.todayWater)
+        case .lunch: return tr("celebrate.lunch")
         default: return tr("celebrate.simple")
         }
     }
@@ -135,13 +136,16 @@ struct PopupView: View {
     private var buttons: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
-                Button { finish(.done) } label: {
-                    Text(tr("btn.done.\(kind.rawValue)")).frame(maxWidth: .infinity)
+                Button { finish(kind == .lunch ? .open : .done) } label: {
+                    Text(tr(kind == .lunch ? "btn.open.lunch" : "btn.done.\(kind.rawValue)"))
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle(colors: kind.colors))
 
-                Button { finish(.snooze) } label: {
-                    Text(tr("btn.snooze", snoozeMinutes)).frame(maxWidth: .infinity)
+                // Cơm: nút phụ là "Đã đặt"; các loại khác là "Nhắc lại sau N phút"
+                Button { finish(kind == .lunch ? .done : .snooze) } label: {
+                    Text(kind == .lunch ? tr("btn.done.lunch") : tr("btn.snooze", snoozeMinutes))
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
             }
